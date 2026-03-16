@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Otto Servo Debug</title>
+    <style>
+      :root {
+        --bg: #0f1216;
+        --panel: #151a21;
+        --text: #e8edf3;
+        --muted: #9aa6b2;
+        --accent: #3fb4ff;
+        --accent-2: #7dd3fc;
+        --border: #232a33;
+      }
+      body {
+        margin: 0;
+        font-family: "JetBrains Mono", "Fira Code", monospace;
+        background: radial-gradient(1200px 600px at 10% 0%, #1a2230, #0f1216);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 980px;
+        margin: 24px auto;
+        padding: 0 16px 40px;
+      }
+      h1 {
+        margin: 16px 0 6px;
+        font-size: 20px;
+      }
+      .note {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+        margin-top: 16px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 120px 1fr 90px 70px;
+        gap: 10px;
+        align-items: center;
+        padding: 6px 0;
+        border-bottom: 1px dashed #202734;
+      }
+      .row:last-child { border-bottom: none; }
+      label { color: var(--muted); font-size: 12px; }
+      input[type="number"], input[type="text"] {
+        width: 100%;
+        background: #0d1117;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 8px;
+      }
+      input[type="range"] { width: 100%; }
+      .btn {
+        background: var(--accent);
+        color: #05141f;
+        border: none;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn.secondary { background: #2a3340; color: var(--text); }
+      .btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 140px;
+        background: #0d1117;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px;
+        font-family: inherit;
+        font-size: 12px;
+      }
+      .status {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #c0392b;
+      }
+      .dot.on { background: #2ecc71; }
+      .controls {
+        display: flex; gap: 8px; flex-wrap: wrap;
+      }
+      @media (max-width: 820px) {
+        .row { grid-template-columns: 90px 1fr 70px 60px; }
+        .grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Otto 六舵机调试</h1>
+      <div class="note">通过设备 WebSocket (ws://设备IP:8080/ws) 发送 MCP tools/call。仅发送命令，回包可能不会返回到网页。</div>
+
+      <div class="panel">
+        <div class="controls">
+          <input id="host" type="text" placeholder="设备IP，如 192.168.1.23" />
+          <input id="port" type="number" value="8080" min="1" max="65535" />
+          <button class="btn" id="btn-connect">连接</button>
+          <button class="btn secondary" id="btn-disconnect">断开</button>
+          <div class="status"><span class="dot" id="dot"></span><span id="status">未连接</span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="controls">
+          <label>速度(ms)</label>
+          <input id="speed" type="number" value="800" min="100" max="3000" />
+          <button class="btn" id="btn-send-pose">发送姿态</button>
+          <button class="btn secondary" id="btn-save-home">保存为 Home</button>
+          <button class="btn ghost" id="btn-home">回到 Home</button>
+          <button class="btn ghost" id="btn-stop">停止</button>
+        </div>
+
+        <div id="servo-list" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="panel grid">
+        <div>
+          <div class="note">自定义序列（self.otto.servo_sequences 的 sequence 字符串）</div>
+          <textarea id="sequence">
+{"a":[{"s":{"ll":90,"rl":90,"lf":90,"rf":90,"lh":45,"rh":135},"v":800}]}
+          </textarea>
+          <div class="controls" style="margin-top:8px;">
+            <button class="btn" id="btn-send-seq">发送序列</button>
+          </div>
+        </div>
+        <div>
+          <div class="note">日志</div>
+          <textarea id="log" readonly></textarea>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const servos = [
+        { key: "left_leg", label: "左腿 (ll)" },
+        { key: "right_leg", label: "右腿 (rl)" },
+        { key: "left_foot", label: "左脚 (lf)" },
+        { key: "right_foot", label: "右脚 (rf)" },
+        { key: "left_hand", label: "左手 (lh)" },
+        { key: "right_hand", label: "右手 (rh)" },
+      ];
+
+      const list = document.getElementById("servo-list");
+      const logEl = document.getElementById("log");
+      const dot = document.getElementById("dot");
+      const statusEl = document.getElementById("status");
+
+      let ws = null;
+      let nextId = 1;
+
+      function log(msg) {
+        logEl.value += msg + "\n";
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      function setStatus(connected) {
+        dot.className = connected ? "dot on" : "dot";
+        statusEl.textContent = connected ? "已连接" : "未连接";
+      }
+
+      function buildUI() {
+        servos.forEach((s) => {
+          const row = document.createElement("div");
+          row.className = "row";
+          row.innerHTML = `
+            <label>${s.label}</label>
+            <input type="range" min="0" max="180" value="90" data-key="${s.key}">
+            <input type="number" min="0" max="180" value="90" data-key="${s.key}">
+            <label><input type="checkbox" data-use="${s.key}" checked> 使用</label>
+          `;
+          list.appendChild(row);
+        });
+
+        list.querySelectorAll("input[type=range]").forEach((range) => {
+          range.addEventListener("input", () => {
+            const num = list.querySelector(`input[type=number][data-key="${range.dataset.key}"]`);
+            num.value = range.value;
+          });
+        });
+        list.querySelectorAll("input[type=number]").forEach((num) => {
+          num.addEventListener("input", () => {
+            const range = list.querySelector(`input[type=range][data-key="${num.dataset.key}"]`);
+            range.value = num.value;
+          });
+        });
+      }
+
+      function sendTool(name, args) {
+        if (!ws || ws.readyState !== 1) {
+          log("[ERR] WebSocket 未连接");
+          return;
+        }
+        const msg = {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: { name, arguments: args || {} },
+          id: nextId++,
+        };
+        ws.send(JSON.stringify(msg));
+        log(`[SEND] ${name} ${JSON.stringify(args || {})}`);
+      }
+
+      document.getElementById("btn-connect").addEventListener("click", () => {
+        const host = document.getElementById("host").value.trim();
+        const port = document.getElementById("port").value.trim() || "8080";
+        if (!host) {
+          log("[ERR] 请填写设备 IP");
+          return;
+        }
+        const url = `ws://${host}:${port}/ws`;
+        ws = new WebSocket(url);
+        ws.onopen = () => { setStatus(true); log(`[OK] 已连接 ${url}`); };
+        ws.onclose = () => { setStatus(false); log("[INFO] 连接已关闭"); };
+        ws.onerror = () => { setStatus(false); log("[ERR] 连接错误"); };
+        ws.onmessage = (evt) => { log(`[RECV] ${evt.data}`); };
+      });
+
+      document.getElementById("btn-disconnect").addEventListener("click", () => {
+        if (ws) ws.close();
+      });
+
+      document.getElementById("btn-send-pose").addEventListener("click", () => {
+        const args = { speed: Number(document.getElementById("speed").value || 800) };
+        servos.forEach((s) => {
+          const use = list.querySelector(`input[type=checkbox][data-use="${s.key}"]`).checked;
+          const val = Number(list.querySelector(`input[type=number][data-key="${s.key}"]`).value);
+          args[s.key] = use ? val : -1;
+        });
+        sendTool("self.otto.pose", args);
+      });
+
+      document.getElementById("btn-save-home").addEventListener("click", () => {
+        sendTool("self.otto.save_home", {});
+      });
+
+      document.getElementById("btn-home").addEventListener("click", () => {
+        sendTool("self.otto.action", { action: "home" });
+      });
+
+      document.getElementById("btn-stop").addEventListener("click", () => {
+        sendTool("self.otto.stop", {});
+      });
+
+      document.getElementById("btn-send-seq").addEventListener("click", () => {
+        let text = document.getElementById("sequence").value.trim();
+        if (!text) {
+          log("[ERR] 序列为空");
+          return;
+        }
+        sendTool("self.otto.servo_sequences", { sequence: text });
+      });
+
+      buildUI();
+      setStatus(false);
+    </script>
+  </body>
+</html>
