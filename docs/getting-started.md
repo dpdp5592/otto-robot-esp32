@@ -77,6 +77,12 @@ idf.py set-target esp32s3
 idf.py fullclean
 ```
 
+如果本地目录中残留了旧的 `managed_components/`、`build/` 或 `sdkconfig`，建议一并删除后再重新执行上述命令：
+
+```bash
+rm -rf managed_components build sdkconfig
+```
+
 进入配置界面：
 
 ```bash
@@ -149,6 +155,20 @@ sudo usermod -aG dialout "$USER"
 - USB 线缆是否支持数据传输
 - Otto 是否正确上电
 - 设备是否已进入烧录模式
+
+### 8.4 `managed_components` 被判定为已修改
+
+如果 `idf.py build` 报出 `managed_components` 中组件文件缺失或被修改，通常说明本地缓存被裁剪、手工改动或来自旧环境。
+
+处理方式：
+
+```bash
+rm -rf managed_components build sdkconfig
+idf.py set-target esp32s3
+idf.py -DBOARD_NAME=otto-robot build
+```
+
+该目录由 ESP-IDF 自动管理，不建议手工整理后再提交到仓库。
 
 ## 9. 说明
 

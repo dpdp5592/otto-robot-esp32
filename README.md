@@ -24,11 +24,18 @@
 - 已安装 ESP-IDF `v5.5.2`
 - 已执行 `source ~/esp/esp-idf/export.sh`
 - 已连接 Otto 开发板
+- 已在 Ubuntu 22.04 + ESP-IDF `v5.5.2` 环境完成一次完整 `idf.py set-target esp32s3` + `idf.py -DBOARD_NAME=otto-robot build` 验证
 
 也可以先执行：
 
 ```bash
 bash scripts/check_prereqs.sh
+```
+
+如果本地曾经保留过旧的 `managed_components/` 或 `build/` 缓存，建议先清理后再重新编译：
+
+```bash
+rm -rf managed_components build sdkconfig
 ```
 
 ## 最短烧录路径
