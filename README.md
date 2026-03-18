@@ -8,6 +8,30 @@
 - 仅保留 `boards/common` 公共板级依赖
 - 保留 `esp32s3` 下可完成编译、烧录和串口监视的最小工程结构
 
+## 三仓库关系
+
+`otto-robot-esp32` 是三仓库方案中的固件仓库。
+
+完整方案由以下三个仓库组成：
+
+1. `otto-robot-esp32`
+   - Otto 固件
+   - 提供本地动作、表情、MCP 控制能力
+2. `otto-esp32-openclaw-server`
+   - 服务端、智控台、body bridge
+   - 负责配对、设备桥接与 OpenClaw 接口
+3. `openclaw-otto-body-plugin`
+   - OpenClaw 插件
+   - 对外暴露 `otto_action`、`otto_stop`、`otto_get_status`、`otto_set_theme`、`otto_set_emotion`
+
+建议阅读顺序：
+
+1. 当前 README
+2. [docs/getting-started.md](./docs/getting-started.md)
+3. [docs/board-and-openclaw.md](./docs/board-and-openclaw.md)
+4. `otto-esp32-openclaw-server` README
+5. `openclaw-otto-body-plugin` README
+
 当前板级目录仅包含：
 
 - `main/boards/otto-robot`
@@ -104,6 +128,34 @@ Ctrl+]
 - [main/boards/otto-robot/otto_controller.cc](./main/boards/otto-robot/otto_controller.cc)
 - [main/boards/otto-robot/otto_movements.cc](./main/boards/otto-robot/otto_movements.cc)
 - [main/boards/otto-robot/otto_emoji_display.cc](./main/boards/otto-robot/otto_emoji_display.cc)
+
+当前固件中与 OpenClaw 最直接相关的动作入口是：
+
+- `self.otto.action`
+
+其中已经实现的典型动作包括：
+
+- `walk`
+- `turn`
+- `jump`
+- `swing`
+- `moonwalk`
+- `showcase`
+- `home`
+- `hand_wave`
+- `greeting`
+- `magic_circle`
+
+这意味着“前进 / 后退 / 太空步”这一类 OpenClaw 指令，不需要额外新增固件协议，而是通过 `self.otto.action` 的参数组合完成。
+
+## 固件完成判定
+
+当该仓库按文档完成烧录并与服务端联调后，应至少满足：
+
+1. Otto 可联网并连接 `xiaozhi-server`
+2. Otto 在线时可被服务端识别为 body 设备
+3. 设备侧 MCP 工具中包含 `self.otto.action`、`self.otto.stop`、`self.otto.get_status`
+4. 通过服务端桥接调用 `self.otto.action(action=\"walk\")` 时，设备可执行动作
 
 ## 说明
 
