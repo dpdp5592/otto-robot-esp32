@@ -79,14 +79,31 @@ Ctrl+]
 该精简工程保留了 Otto 当前用于 OpenClaw 联动的本地控制能力，包括：
 
 - 板载 WebSocket 控制端
+- Otto 舵机动作调用入口
+- Otto 舵机序列调用入口
 - `self.otto.pose`
+- `self.otto.action`
+- `self.otto.servo_sequences`
+- `self.otto.stop`
 - `self.otto.save_home`
 - Otto 本地 MCP 工具响应能力
+- Otto 表情资源与表情显示能力
+
+这意味着 OpenClaw 可以通过 Otto 本地 WebSocket MCP 通道直接下发：
+
+- 单次姿态控制
+- 预定义动作调用
+- 自定义六舵机序列动作
+- 停止与复位
+- Home 姿态保存
+- 表情/情绪显示联动
 
 相关实现位于：
 
 - [main/boards/otto-robot/websocket_control_server.cc](./main/boards/otto-robot/websocket_control_server.cc)
 - [main/boards/otto-robot/otto_controller.cc](./main/boards/otto-robot/otto_controller.cc)
+- [main/boards/otto-robot/otto_movements.cc](./main/boards/otto-robot/otto_movements.cc)
+- [main/boards/otto-robot/otto_emoji_display.cc](./main/boards/otto-robot/otto_emoji_display.cc)
 
 ## 说明
 
